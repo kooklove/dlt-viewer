@@ -5,6 +5,9 @@ add_executable(test_qdlt
     test_qdltmsgwrapper.cpp
     test_qdltfile.cpp
     test_qdltpluginmanager.cpp
+    test_dltdiagramplugin.cpp
+    ../../plugin/dltdiagramplugin/diagrammodel.cpp
+    ../../plugin/dltdiagramplugin/diagramengine.cpp
 )
 target_link_libraries(
   test_qdlt

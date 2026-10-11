@@ -1,0 +1,110 @@
+{
+  "version": "1.0",
+  "tabName": "Default",
+  "diagrams": [
+    {
+      "id": "ecu_lifecycle_state",
+      "title": "ECU Lifecycle & Power State Machine",
+      "type": "state",
+      "diagramFormat": "mermaid",
+      "initialState": "Init",
+      "diagramSource": "stateDiagram-v2\n    [*] --> Init\n    Init --> Startup : BootComplete\n    Startup --> Run : ServicesReady\n    Run --> Degraded : FaultDetected\n    Degraded --> Run : FaultCleared\n    Run --> Shutdown : IgnitionOff\n    Shutdown --> Sleep : PowerDown\n    Sleep --> Startup : Wakeup",
+      "rules": [
+        {
+          "name": "Explicit Transition Pattern (A -> B)",
+          "apid": "",
+          "ctid": "",
+          "payloadRegex": "(?:State|STATE|Transition|Mode)\\s*(?:changed|transition)?\\s*[:=]?\\s*([A-Za-z0-9_]+)\\s*(?:->|=>|to)\\s*([A-Za-z0-9_]+)(?:\\s*\\(([^)]+)\\))?",
+          "from": "$1",
+          "to": "$2",
+          "event": "$3"
+        },
+        {
+          "name": "Enter State Pattern",
+          "apid": "",
+          "ctid": "",
+          "payloadRegex": "(?:Enter(?:ing)?|Current)\\s+(?:state|mode)\\s*[:=]\\s*([A-Za-z0-9_]+)",
+          "from": "*",
+          "to": "$1",
+          "event": "Enter $1"
+        },
+        {
+          "name": "DLT Connection / Control State",
+          "apid": "DLT",
+          "ctid": "",
+          "payloadRegex": "(connected|disconnected|timeout)",
+          "from": "*",
+          "to": "$1",
+          "event": "DLT $1"
+        }
+      ]
+    },
+    {
+      "id": "service_ipc_sequence",
+      "title": "Component / APID Message Sequence",
+      "type": "sequence",
+      "diagramFormat": "plantuml",
+      "diagramSource": "@startuml\nparticipant HMI\nparticipant MediaMgr\nparticipant AudioDaemon\nparticipant SystemMgr\n@enduml",
+      "rules": [
+        {
+          "name": "Explicit Arrow Log ([Caller -> Callee] Msg)",
+          "apid": "",
+          "ctid": "",
+          "payloadRegex": "\\[?([A-Za-z0-9_]+)\\s*(->|-->)\\s*([A-Za-z0-9_]+)\\]?\\s*:\\s*(.+)",
+          "from": "$1",
+          "to": "$3",
+          "message": "$4",
+          "arrowType": "sync"
+        },
+        {
+          "name": "Send / Request Pattern",
+          "apid": "",
+          "ctid": "",
+          "payloadRegex": "(?:send|request|call)\\s+to\\s+([A-Za-z0-9_]+)\\s*:\\s*(.+)",
+          "from": "$APID",
+          "to": "$1",
+          "message": "$2",
+          "arrowType": "sync"
+        },
+        {
+          "name": "APID -> CTID Activity Sequence",
+          "apid": "",
+          "ctid": "",
+          "payloadRegex": "^(.{1,80})",
+          "from": "$ECUID_$APID",
+          "to": "$APID_$CTID",
+          "message": "$1",
+          "arrowType": "sync"
+        }
+      ]
+    },
+    {
+      "id": "ota_update_flow",
+      "title": "OTA Package Verification & Install Flow",
+      "type": "flow",
+      "diagramFormat": "mermaid",
+      "initialState": "DownloadPkg",
+      "diagramSource": "flowchart TD\n    DownloadPkg([Download Package]) --> VerifySig{Signature Valid?}\n    VerifySig -->|Yes| CheckSpace{Storage OK?}\n    VerifySig -->|No| AbortUpdate([Abort & Rollback])\n    CheckSpace -->|Yes| ApplyDelta[Install Delta Image]\n    CheckSpace -->|No| AbortUpdate\n    ApplyDelta --> RebootEcu([Activate & Reboot])",
+      "rules": [
+        {
+          "name": "Flow Step Log",
+          "apid": "",
+          "ctid": "",
+          "payloadRegex": "(?:Flow|Step|Stage)\\s*[:=]\\s*([A-Za-z0-9_]+)(?:\\s*->\\s*([A-Za-z0-9_]+))?(?:\\s*\\(([^)]+)\\))?",
+          "from": "$1",
+          "to": "$2",
+          "event": "$3"
+        },
+        {
+          "name": "Enter Flow Step",
+          "apid": "",
+          "ctid": "",
+          "payloadRegex": "Step\\s+enter\\s*[:=]\\s*([A-Za-z0-9_]+)",
+          "from": "*",
+          "to": "$1",
+          "event": "Step $1"
+        }
+      ]
+    }
+  ]
+}

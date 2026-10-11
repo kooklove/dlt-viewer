@@ -30,6 +30,7 @@ function(add_plugin NAME)
 endfunction()
 
 add_subdirectory(dltdbusplugin)
+add_subdirectory(dltdiagramplugin)
 add_subdirectory(dlttestrobotplugin)
 add_subdirectory(dltviewerplugin)
 add_subdirectory(filetransferplugin)

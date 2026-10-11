@@ -35,6 +35,7 @@
 #include <QDateTime>
 #include <QSerialPort>
 #include <QPluginLoader>
+#include <QProcess>
 
 #include <cstdint>
 
@@ -51,7 +52,8 @@ public:
         INTERFACETYPE_TCP,
         INTERFACETYPE_UDP,
         INTERFACETYPE_SERIAL_DLT,
-        INTERFACETYPE_SERIAL_ASCII
+        INTERFACETYPE_SERIAL_ASCII,
+        INTERFACETYPE_ANDROID_LOGCAT
     };
 
     EcuItem(QTreeWidgetItem *parent = 0);
@@ -83,6 +85,7 @@ public:
     QAbstractSocket * socket;
 
     QSerialPort *m_serialport;
+    QProcess *m_adbprocess;
 
     /* connection status */
     bool tryToConnect;
@@ -160,6 +163,37 @@ public:
 
      bool getWriteDLTv2StorageHeader() const;
      void setWriteDLTv2StorageHeader(bool newWriteDLTv2StorageHeader);
+
+private:
+     /* Configuration Android Logcat */
+     QString adbPath;
+     QString adbDeviceSerial;
+     QString adbPreCommand;
+     QString adbLogcatArgs;
+     int adbSaveFormat;
+
+public:
+     enum {
+         LOGCAT_SAVE_DLT = 0,
+         LOGCAT_SAVE_TEXT = 1
+     };
+
+     QDltConnection logcatcon;
+
+     QString getAdbPath() const { return adbPath; }
+     void setAdbPath(const QString &p) { adbPath = p; }
+
+     QString getAdbDeviceSerial() const { return adbDeviceSerial; }
+     void setAdbDeviceSerial(const QString &s) { adbDeviceSerial = s; }
+
+     QString getAdbPreCommand() const { return adbPreCommand; }
+     void setAdbPreCommand(const QString &c) { adbPreCommand = c; }
+
+     QString getAdbLogcatArgs() const { return adbLogcatArgs; }
+     void setAdbLogcatArgs(const QString &a) { adbLogcatArgs = a; }
+
+     int getAdbSaveFormat() const { return adbSaveFormat; }
+     void setAdbSaveFormat(int f) { adbSaveFormat = f; }
 };
 
 class ApplicationItem  : public QTreeWidgetItem

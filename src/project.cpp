@@ -69,6 +69,13 @@ EcuItem::EcuItem(QTreeWidgetItem *parent)
     status = EcuItem::unknown;
 
     m_serialport = 0;
+    m_adbprocess = 0;
+
+    adbPath = "adb";
+    adbDeviceSerial = "";
+    adbPreCommand = "";
+    adbLogcatArgs = "-v threadtime";
+    adbSaveFormat = LOGCAT_SAVE_DLT;
 
     /* Limit size of socket receiption buffer to limit application buffer size */
     /* qt sets buffer normally to unlimited */
@@ -81,7 +88,12 @@ EcuItem::EcuItem(QTreeWidgetItem *parent)
 
 EcuItem::~EcuItem()
 {
-
+    if(m_adbprocess)
+    {
+        m_adbprocess->kill();
+        m_adbprocess->deleteLater();
+        m_adbprocess = 0;
+    }
 }
 
 void EcuItem::update()
@@ -149,6 +161,10 @@ void EcuItem::update()
         case EcuItem::INTERFACETYPE_SERIAL_DLT:
         case EcuItem::INTERFACETYPE_SERIAL_ASCII:
             setData(1,Qt::DisplayRole,QString("%1 [%2]").arg(description).arg(port));
+            socket = 0;
+            break;
+        case EcuItem::INTERFACETYPE_ANDROID_LOGCAT:
+            setData(1,Qt::DisplayRole,QString("%1 [Logcat %2 (%3)]").arg(description).arg(adbDeviceSerial.isEmpty() ? "Default" : adbDeviceSerial).arg(adbSaveFormat == LOGCAT_SAVE_TEXT ? "TEXT" : "DLT"));
             socket = 0;
             break;
     }
@@ -900,6 +916,31 @@ bool Project::Load(QString filename)
                       ecuitem->autoReconnectTimeout = xml.readElementText().toInt();
 
               }
+              if(xml.name() == QString("adbPath"))
+              {
+                  if(ecuitem)
+                      ecuitem->setAdbPath(xml.readElementText());
+              }
+              if(xml.name() == QString("adbDeviceSerial"))
+              {
+                  if(ecuitem)
+                      ecuitem->setAdbDeviceSerial(xml.readElementText());
+              }
+              if(xml.name() == QString("adbPreCommand"))
+              {
+                  if(ecuitem)
+                      ecuitem->setAdbPreCommand(xml.readElementText());
+              }
+              if(xml.name() == QString("adbLogcatArgs"))
+              {
+                  if(ecuitem)
+                      ecuitem->setAdbLogcatArgs(xml.readElementText());
+              }
+              if(xml.name() == QString("adbSaveFormat"))
+              {
+                  if(ecuitem)
+                      ecuitem->setAdbSaveFormat(xml.readElementText().toInt());
+              }
               if(xml.name() == QString("writeDLTv2StorageHeader"))
               {
                   if(ecuitem)
@@ -1091,6 +1132,11 @@ bool Project::Save(QString filename)
         xml.writeTextElement("multicast",QString("%1").arg(ecuitem->is_multicast));
         xml.writeTextElement("autoReconnect",QString("%1").arg(ecuitem->autoReconnect));
         xml.writeTextElement("autoReconnectTimeout",QString("%1").arg(ecuitem->autoReconnectTimeout));
+        xml.writeTextElement("adbPath",ecuitem->getAdbPath());
+        xml.writeTextElement("adbDeviceSerial",ecuitem->getAdbDeviceSerial());
+        xml.writeTextElement("adbPreCommand",ecuitem->getAdbPreCommand());
+        xml.writeTextElement("adbLogcatArgs",ecuitem->getAdbLogcatArgs());
+        xml.writeTextElement("adbSaveFormat",QString("%1").arg(ecuitem->getAdbSaveFormat()));
         xml.writeTextElement("writeDLTv2StorageHeader",QString("%1").arg(ecuitem->getWriteDLTv2StorageHeader()));
 
         for(int numapp = 0; numapp < ecuitem->childCount(); numapp++)

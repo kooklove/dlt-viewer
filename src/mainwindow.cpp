@@ -1285,10 +1285,47 @@ void MainWindow::closeEvent(QCloseEvent *event)
 }
 
 
+bool MainWindow::isLogcatTextSavePreferred() const
+{
+    if(!project.ecu)
+        return false;
+
+    QList<QTreeWidgetItem *> selected = project.ecu->selectedItems();
+    for(QTreeWidgetItem *item : selected)
+    {
+        if(item && item->type() == ecu_type)
+        {
+            const EcuItem *ecuitem = static_cast<const EcuItem*>(item);
+            if(ecuitem->interfacetype == EcuItem::INTERFACETYPE_ANDROID_LOGCAT)
+                return ecuitem->getAdbSaveFormat() == EcuItem::LOGCAT_SAVE_TEXT;
+        }
+    }
+
+    for(int num = 0; num < project.ecu->topLevelItemCount(); num++)
+    {
+        const EcuItem *ecuitem = static_cast<const EcuItem*>(project.ecu->topLevelItem(num));
+        if(ecuitem && ecuitem->interfacetype == EcuItem::INTERFACETYPE_ANDROID_LOGCAT && (ecuitem->connected || ecuitem->tryToConnect))
+            return ecuitem->getAdbSaveFormat() == EcuItem::LOGCAT_SAVE_TEXT;
+    }
+
+    for(int num = 0; num < project.ecu->topLevelItemCount(); num++)
+    {
+        const EcuItem *ecuitem = static_cast<const EcuItem*>(project.ecu->topLevelItem(num));
+        if(ecuitem && ecuitem->interfacetype == EcuItem::INTERFACETYPE_ANDROID_LOGCAT)
+            return ecuitem->getAdbSaveFormat() == EcuItem::LOGCAT_SAVE_TEXT;
+    }
+
+    return false;
+}
+
 void MainWindow::on_action_menuFile_New_triggered()
 {
+    QString filter = isLogcatTextSavePreferred()
+        ? tr("Logcat Text Files (*.log *.txt *.logcat);;DLT Files (*.dlt);;All files (*.*)")
+        : tr("DLT Files (*.dlt);;Logcat Text Files (*.log *.txt *.logcat);;All files (*.*)");
+
     QString fileName = QFileDialog::getSaveFileName(this,
-        tr("New DLT Log file"), workingDirectory.getDltDirectory(), tr("DLT Files (*.dlt);;All files (*.*)"));
+        tr("New Log file"), workingDirectory.getDltDirectory(), filter);
 
     if(fileName.isEmpty())
     {
@@ -1303,6 +1340,35 @@ void MainWindow::onNewTriggered(QString fileName)
     //qDebug() << "MainWindow::onNewTriggered" << fileName << __FILE__ << __LINE__;
     // change DLT file working directory
     workingDirectory.setDltDirectory(QFileInfo(fileName).absolutePath());
+
+    if(fileName.endsWith(".log", Qt::CaseInsensitive) ||
+       fileName.endsWith(".txt", Qt::CaseInsensitive) ||
+       fileName.endsWith(".logcat", Qt::CaseInsensitive))
+    {
+        on_action_menuFile_Clear_triggered();
+        if(logcatTextOutputFile.isOpen())
+            logcatTextOutputFile.close();
+        logcatTextOutputFile.setFileName(fileName);
+        if(logcatTextOutputFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        {
+            logcatTextOutputFile.close();
+            outputfileIsTemporary = false;
+            outputfileIsFromCLI = false;
+            setCurrentFile(fileName);
+        }
+        else
+        {
+            QMessageBox::critical(0, QString("DLT Viewer"),
+                                  QString("Cannot create new log file \"%1\"\n%2")
+                                  .arg(fileName)
+                                  .arg(logcatTextOutputFile.errorString()));
+        }
+        return;
+    }
+
+    if(logcatTextOutputFile.isOpen())
+        logcatTextOutputFile.close();
+    logcatTextOutputFile.setFileName("");
 
     // close existing file
     if(outputfile.isOpen())
@@ -1352,7 +1418,7 @@ void MainWindow::onNewTriggered(QString fileName)
 void MainWindow::on_action_menuFile_Open_triggered()
 {
     QStringList fileNames = QFileDialog::getOpenFileNames(this,
-        tr("Open DLT/PCAP/MF4 files"), workingDirectory.getDltDirectory(), tr("DLT/PCAP/MF4 files (*.dlt *.DLT *.pcap *.PCAP *.mf4 *.MF4);;DLT files (*.dlt *.DLT);;PCAP files (*.pcap *.PCAP);;MF4 files (*.mf4 *.MF4)"));
+        tr("Open DLT/PCAP/MF4/Logcat files"), workingDirectory.getDltDirectory(), tr("All Supported Log Files (*.dlt *.DLT *.pcap *.PCAP *.mf4 *.MF4 *.log *.txt *.logcat);;DLT files (*.dlt *.DLT);;Logcat files (*.log *.txt *.logcat);;PCAP files (*.pcap *.PCAP);;MF4 files (*.mf4 *.MF4)"));
 
     if(fileNames.isEmpty())
         return;
@@ -1360,7 +1426,7 @@ void MainWindow::on_action_menuFile_Open_triggered()
     /* change DLT file working directory */
     workingDirectory.setDltDirectory(QFileInfo(fileNames[0]).absolutePath());
 
-    QStringList dltFileNames,pcapFileNames,mf4FileNames;
+    QStringList dltFileNames,pcapFileNames,mf4FileNames,logcatFileNames;
 
     for ( const auto& i : fileNames )
     {
@@ -1370,13 +1436,15 @@ void MainWindow::on_action_menuFile_Open_triggered()
             pcapFileNames+=i;
         else if(i.endsWith(".mf4",Qt::CaseInsensitive))
             mf4FileNames+=i;
+        else if(i.endsWith(".log",Qt::CaseInsensitive) || i.endsWith(".txt",Qt::CaseInsensitive) || i.endsWith(".logcat",Qt::CaseInsensitive))
+            logcatFileNames+=i;
     }
 
-    if(!dltFileNames.isEmpty()&&pcapFileNames.isEmpty()&&mf4FileNames.isEmpty())
+    if(!dltFileNames.isEmpty()&&pcapFileNames.isEmpty()&&mf4FileNames.isEmpty()&&logcatFileNames.isEmpty())
     {
         onOpenTriggered(dltFileNames);
     }
-    else if(dltFileNames.isEmpty()&&!pcapFileNames.isEmpty()&&mf4FileNames.isEmpty())
+    else if(dltFileNames.isEmpty()&&!pcapFileNames.isEmpty()&&mf4FileNames.isEmpty()&&logcatFileNames.isEmpty())
     {
         on_action_menuFile_Clear_triggered();
         QDltImporter *importerThread = new QDltImporter(&outputfile,pcapFileNames);
@@ -1388,7 +1456,7 @@ void MainWindow::on_action_menuFile_Open_triggered()
         importerThread->setPriority(QThread::LowPriority);
         importerThread->start();
     }
-    else if(dltFileNames.isEmpty()&&pcapFileNames.isEmpty()&&!mf4FileNames.isEmpty())
+    else if(dltFileNames.isEmpty()&&pcapFileNames.isEmpty()&&!mf4FileNames.isEmpty()&&logcatFileNames.isEmpty())
     {
         on_action_menuFile_Clear_triggered();
         QDltImporter *importerThread = new QDltImporter(&outputfile,mf4FileNames);
@@ -1400,14 +1468,23 @@ void MainWindow::on_action_menuFile_Open_triggered()
         importerThread->setPriority(QThread::LowPriority);
         importerThread->start();
     }
+    else if(dltFileNames.isEmpty()&&pcapFileNames.isEmpty()&&mf4FileNames.isEmpty()&&!logcatFileNames.isEmpty())
+    {
+        on_action_menuFile_Clear_triggered();
+        QDltImporter *importerThread = new QDltImporter(&outputfile,logcatFileNames);
+        connect(importerThread, &QDltImporter::progress,    this, &MainWindow::progress);
+        connect(importerThread, &QDltImporter::resultReady, this, &MainWindow::handleImportResults);
+        connect(importerThread, &QDltImporter::finished,    importerThread, &QObject::deleteLater);
+        statusProgressBar->show();
+        importerThread->setPriority(QThread::LowPriority);
+        importerThread->start();
+    }
     else
     {
-        QMessageBox msgBox(QMessageBox::Warning, "Open DLT/PCAP/MF4 files", "Mixing opening different file types not allowed!", QMessageBox::Close);
+        QMessageBox msgBox(QMessageBox::Warning, "Open Log files", "Mixing opening different file types not allowed!", QMessageBox::Close);
         qDebug() << "ERROR: Mixing opening different file types not allowed!";
     }
-
 }
-
 
 void MainWindow::onOpenTriggered(QStringList filenames)
 {
@@ -2325,15 +2402,23 @@ void MainWindow::on_actionSplitDLTFile_triggered(){
 
 void MainWindow::on_action_menuFile_SaveAs_triggered()
 {
-
     QFileDialog dialog(this);
     QStringList filters;
-    filters << "DLT Files (*.dlt)" <<"All files (*.*)";
+    if(isLogcatTextSavePreferred())
+    {
+        filters << "Logcat Text Files (*.log *.txt *.logcat)" << "DLT Files (*.dlt)" << "All files (*.*)";
+        dialog.setDefaultSuffix("log");
+        dialog.setWindowTitle("Save Logcat / DLT Log file");
+    }
+    else
+    {
+        filters << "DLT Files (*.dlt)" << "Logcat Text Files (*.log *.txt *.logcat)" << "All files (*.*)";
+        dialog.setDefaultSuffix("dlt");
+        dialog.setWindowTitle("Save DLT Log file");
+    }
     dialog.setAcceptMode(QFileDialog::AcceptSave);
-    dialog.setDefaultSuffix("dlt");
     dialog.setDirectory(workingDirectory.getDltDirectory());
     dialog.setNameFilters(filters);
-    dialog.setWindowTitle("Save DLT Log file");
     dialog.exec();
     if(dialog.result() != QFileDialog::Accepted ||
         dialog.selectedFiles().count() < 1)
@@ -2355,7 +2440,7 @@ void MainWindow::onSaveAsTriggered(QString fileName)
 {
     //qDebug() << "MainWindow::onSaveAsTriggered" << fileName << __FILE__ << __LINE__;
     /* check if filename is the same as already open */
-    if(outputfile.fileName()==fileName)
+    if(outputfile.fileName()==fileName || logcatTextOutputFile.fileName()==fileName)
     {
         QMessageBox::critical(0, QString("DLT Viewer"),
                               QString("File is already open:\n")+fileName);
@@ -2373,6 +2458,44 @@ void MainWindow::onSaveAsTriggered(QString fileName)
 
     /* change DLT file working directory */
     workingDirectory.setDltDirectory(QFileInfo(fileName).absolutePath());
+
+    if(fileName.endsWith(".log", Qt::CaseInsensitive) ||
+       fileName.endsWith(".txt", Qt::CaseInsensitive) ||
+       fileName.endsWith(".logcat", Qt::CaseInsensitive))
+    {
+        if(logcatTextOutputFile.isOpen())
+            logcatTextOutputFile.close();
+        logcatTextOutputFile.setFileName(fileName);
+        if(!logcatTextOutputFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        {
+            QMessageBox::critical(0, QString("DLT Viewer"),
+                                  QString("Cannot write Logcat text file \"%1\"\n%2")
+                                  .arg(fileName)
+                                  .arg(logcatTextOutputFile.errorString()));
+            return;
+        }
+
+        QDltMsg msg;
+        for(int num = 0; num < qfile.size(); ++num)
+        {
+            const MessageId messageId = m_messageStore.messageIdForGlobalIndex(num);
+            if(messageId == kInvalidMessageId || !m_messageStore.message(messageId, msg))
+                continue;
+            QByteArray lineBytes = (QDltConnection::formatLogcatLine(msg) + "\n").toUtf8();
+            logcatTextOutputFile.write(lineBytes);
+        }
+        logcatTextOutputFile.flush();
+        logcatTextOutputFile.close();
+
+        outputfileIsTemporary = false;
+        outputfileIsFromCLI = false;
+        setCurrentFile(fileName);
+        return;
+    }
+
+    if(logcatTextOutputFile.isOpen())
+        logcatTextOutputFile.close();
+    logcatTextOutputFile.setFileName("");
 
     qfile.close();
     outputfile.close();
@@ -2422,6 +2545,10 @@ void MainWindow::on_action_menuFile_Clear_triggered()
 {
     //qDebug() << "MainWindow::on_action_menuFile_Clear_triggered()" << outputfile.fileName() << __FILE__ <<  __LINE__;
     dltIndexer->stop(); // in case an indexer thread is running right now we need to stop it
+
+    if(logcatTextOutputFile.isOpen())
+        logcatTextOutputFile.close();
+    logcatTextOutputFile.setFileName("");
 
     QString fn = DltFileUtils::createTempFile(DltFileUtils::getTempPath(QDltOptManager::getInstance()->issilentMode()), QDltOptManager::getInstance()->issilentMode());
     if(!fn.length())
@@ -4246,11 +4373,24 @@ void MainWindow::disconnectECU(EcuItem *ecuitem)
             if (ecuitem->socket->state()!=QAbstractSocket::UnconnectedState)
                 ecuitem->socket->disconnectFromHost();
         }
+        else if(ecuitem->interfacetype == EcuItem::INTERFACETYPE_ANDROID_LOGCAT)
+        {
+            /* Android Logcat */
+            qDebug() << "Stop Android Logcat for" << ecuitem->getAdbDeviceSerial();
+            if(ecuitem->m_adbprocess)
+            {
+                ecuitem->m_adbprocess->kill();
+                ecuitem->m_adbprocess->waitForFinished(1000);
+                delete ecuitem->m_adbprocess;
+                ecuitem->m_adbprocess = nullptr;
+            }
+        }
         else
         {
             /* Serial */
             qDebug() << "Close serial port" << ecuitem->getPort();
-            ecuitem->m_serialport->close();
+            if(ecuitem->m_serialport)
+                ecuitem->m_serialport->close();
         }
 
         ecuitem->InvalidAll();
@@ -4445,6 +4585,116 @@ void MainWindow::connectECU(EcuItem* ecuitem,bool force)
                   ecuitem->connected = false;
                   ecuitem->update();
                 }
+            }
+        }
+        else if(ecuitem->interfacetype == EcuItem::INTERFACETYPE_ANDROID_LOGCAT)
+        {
+            /* Android Logcat */
+            qDebug() << "Try to connect to Android Logcat via ADB" << ecuitem->getAdbPath() << ecuitem->getAdbDeviceSerial();
+            if(!ecuitem->m_adbprocess)
+            {
+                ecuitem->m_adbprocess = new QProcess(this);
+            }
+            else if(ecuitem->m_adbprocess->state() != QProcess::NotRunning)
+            {
+                ecuitem->m_adbprocess->kill();
+                ecuitem->m_adbprocess->waitForFinished(1000);
+            }
+
+            connect(ecuitem->m_adbprocess, &QProcess::readyReadStandardOutput, this, &MainWindow::readyReadLogcat);
+            connect(ecuitem->m_adbprocess, &QProcess::errorOccurred, this, &MainWindow::logcatProcessError);
+            connect(ecuitem->m_adbprocess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &MainWindow::logcatProcessFinished);
+
+            QString program = ecuitem->getAdbPath().isEmpty() ? "adb" : ecuitem->getAdbPath();
+            QString serial = ecuitem->getAdbDeviceSerial().trimmed();
+
+            // If the serial is an IP:Port address, ensure ADB is connected over Ethernet first
+            if(serial.contains(':') || serial.contains('.'))
+            {
+                qDebug() << "Auto-connecting ADB over Ethernet to" << serial;
+                QProcess connProc;
+                connProc.start(program, QStringList() << "connect" << serial);
+                connProc.waitForFinished(3000);
+            }
+
+            // Execute Pre-commands before starting logcat
+            QString preCmds = ecuitem->getAdbPreCommand().trimmed();
+            if(!preCmds.isEmpty())
+            {
+                QStringList cmdList = preCmds.split(QRegularExpression("[;\n]"),
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                    Qt::SkipEmptyParts
+#else
+                    QString::SkipEmptyParts
+#endif
+                );
+                for(QString cmd : cmdList)
+                {
+                    cmd = cmd.trimmed();
+                    if(cmd.isEmpty()) continue;
+
+                    // Strip leading "adb " if user typed it
+                    if(cmd.startsWith("adb ", Qt::CaseInsensitive))
+                    {
+                        cmd = cmd.mid(4).trimmed();
+                    }
+
+                    QStringList preArgs;
+                    if(!serial.isEmpty() && !cmd.startsWith("-s "))
+                    {
+                        preArgs << "-s" << serial;
+                    }
+                    preArgs << cmd.split(QRegularExpression("\\s+"),
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                        Qt::SkipEmptyParts
+#else
+                        QString::SkipEmptyParts
+#endif
+                    );
+
+                    qDebug() << "Executing ADB Pre-command:" << program << preArgs;
+                    QProcess preProc;
+                    preProc.start(program, preArgs);
+                    preProc.waitForFinished(5000);
+                }
+            }
+
+            QStringList arguments;
+            if(!serial.isEmpty())
+            {
+                arguments << "-s" << serial;
+            }
+            arguments << "logcat";
+            QString args = ecuitem->getAdbLogcatArgs().trimmed();
+            if(args.isEmpty())
+            {
+                arguments << "-v" << "threadtime";
+            }
+            else
+            {
+                arguments << args.split(QRegularExpression("\\s+"),
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                    Qt::SkipEmptyParts
+#else
+                    QString::SkipEmptyParts
+#endif
+                );
+            }
+
+            ecuitem->m_adbprocess->start(program, arguments);
+            if(ecuitem->m_adbprocess->waitForStarted(2000))
+            {
+                ecuitem->connected = true;
+                ecuitem->update();
+                on_configWidget_itemSelectionChanged();
+                qDebug() << "Android Logcat process started successfully";
+            }
+            else
+            {
+                ecuitem->connected = false;
+                ecuitem->connectError = "Failed to start ADB process";
+                ecuitem->update();
+                qDebug() << "Failed to start ADB process:" << program << ecuitem->m_adbprocess->errorString();
             }
         }
         else
@@ -4707,6 +4957,49 @@ void MainWindow::error(QAbstractSocket::SocketError /* socketError */)
     }
 }
 
+void MainWindow::readyReadLogcat()
+{
+    readyRead();
+}
+
+void MainWindow::logcatProcessError(QProcess::ProcessError error)
+{
+    Q_UNUSED(error);
+    QProcess *proc = qobject_cast<QProcess*>(sender());
+    for(int num = 0; num < project.ecu->topLevelItemCount(); num++)
+    {
+        EcuItem *ecuitem = (EcuItem*)project.ecu->topLevelItem(num);
+        if(ecuitem && ecuitem->m_adbprocess == proc)
+        {
+            ecuitem->connected = false;
+            ecuitem->connectError = proc ? proc->errorString() : "ADB Process Error";
+            ecuitem->update();
+            qDebug() << "Android Logcat process error:" << ecuitem->connectError;
+            break;
+        }
+    }
+}
+
+void MainWindow::logcatProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    Q_UNUSED(exitCode);
+    Q_UNUSED(exitStatus);
+    QProcess *proc = qobject_cast<QProcess*>(sender());
+    for(int num = 0; num < project.ecu->topLevelItemCount(); num++)
+    {
+        EcuItem *ecuitem = (EcuItem*)project.ecu->topLevelItem(num);
+        if(ecuitem && ecuitem->m_adbprocess == proc)
+        {
+            ecuitem->connected = false;
+            ecuitem->tryToConnect = false;
+            ecuitem->update();
+            qDebug() << "Android Logcat process finished with exit code" << exitCode;
+            break;
+        }
+    }
+    checkConnectionState();
+}
+
 void MainWindow::readyRead()
 {
     /* signal emited when socket received data */
@@ -4718,7 +5011,7 @@ void MainWindow::readyRead()
         for(int num = 0; num < project.ecu->topLevelItemCount (); num++)
         {
             EcuItem *ecuitem = (EcuItem*)project.ecu->topLevelItem(num);
-            if( ecuitem && (ecuitem->socket == sender() || ecuitem->m_serialport == sender() || dltIndexer == sender() ) && ( true == ecuitem->connected || (ecuitem->interfacetype == EcuItem::INTERFACETYPE_UDP ) ) )
+            if( ecuitem && (ecuitem->socket == sender() || ecuitem->m_serialport == sender() || ecuitem->m_adbprocess == sender() || dltIndexer == sender() ) && ( true == ecuitem->connected || (ecuitem->interfacetype == EcuItem::INTERFACETYPE_UDP ) ) )
             {
                 read(ecuitem);
             }
@@ -4893,6 +5186,13 @@ void MainWindow::read(EcuItem* ecuitem)
           bytesRcvd = data.size();
           ecuitem->serialcon.add(data);
           break;
+      case EcuItem::INTERFACETYPE_ANDROID_LOGCAT:
+          if (!ecuitem->m_adbprocess)
+              break;
+          data = ecuitem->m_adbprocess->readAllStandardOutput();
+          bytesRcvd = data.size();
+          ecuitem->logcatcon.add(data);
+          break;
       default:
          break;
      }
@@ -4909,7 +5209,8 @@ void MainWindow::read(EcuItem* ecuitem)
 
      while(((ecuitem->interfacetype == EcuItem::INTERFACETYPE_TCP) && ecuitem->ipcon.parseDlt(qmsg,settings->supportDLTv2Decoding)) ||
             (ecuitem->interfacetype == EcuItem::INTERFACETYPE_SERIAL_DLT && ecuitem->serialcon.parseDlt(qmsg,settings->supportDLTv2Decoding)) ||
-            (ecuitem->interfacetype == EcuItem::INTERFACETYPE_SERIAL_ASCII && ecuitem->serialcon.parseAscii(qmsg)) )
+            (ecuitem->interfacetype == EcuItem::INTERFACETYPE_SERIAL_ASCII && ecuitem->serialcon.parseAscii(qmsg)) ||
+            (ecuitem->interfacetype == EcuItem::INTERFACETYPE_ANDROID_LOGCAT && ecuitem->logcatcon.parseLogcat(qmsg, ecuitem->id)) )
         {
             /* analyse received message, check if DLT control message response */
             if ( (qmsg.getType()==QDltMsg::DltTypeControl) && (qmsg.getSubtype()==QDltMsg::DltControlResponse))
@@ -4920,6 +5221,7 @@ void MainWindow::read(EcuItem* ecuitem)
             /* write message to file */
             const QByteArray bufferHeader = qmsg.getHeader();
             const QByteArray bufferPayload = qmsg.getPayload();
+            bool shouldWrite = true;
             if(settings->loggingOnlyFilteredMessages)
             {
                 // write only messages which match filter
@@ -4928,23 +5230,30 @@ void MainWindow::read(EcuItem* ecuitem)
                 {
                    pluginManager.decodeMsg(qmsg,silentMode);
                 }
-                if(qfile.checkFilter(qmsg))
-                {
-                    writeDLTMessageToFile(
-                                bufferHeader,
-                                {bufferPayload.data(),
-                                 static_cast<std::string_view::size_type>(bufferPayload.size())},
-                                ecuitem);
-                }
+                shouldWrite = qfile.checkFilter(qmsg);
             }
-            else
+
+            if(shouldWrite)
             {
-                // write all messages
                 writeDLTMessageToFile(
                             bufferHeader,
                             {bufferPayload.data(),
                              static_cast<std::string_view::size_type>(bufferPayload.size())},
                             ecuitem);
+
+                if(!logcatTextOutputFile.fileName().isEmpty())
+                {
+                    if(!logcatTextOutputFile.isOpen())
+                        logcatTextOutputFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text);
+                    if(logcatTextOutputFile.isOpen())
+                    {
+                        QString textLine = (ecuitem->interfacetype == EcuItem::INTERFACETYPE_ANDROID_LOGCAT && !ecuitem->logcatcon.getLastLogcatLine().isEmpty())
+                            ? ecuitem->logcatcon.getLastLogcatLine()
+                            : QDltConnection::formatLogcatLine(qmsg);
+                        logcatTextOutputFile.write((textLine + "\n").toUtf8());
+                        logcatTextOutputFile.flush();
+                    }
+                }
             }
 
         } //end while
@@ -8922,6 +9231,9 @@ QString MainWindow::GetConnectionType(int iTypeNumber)
        break;
    case EcuItem::INTERFACETYPE_SERIAL_ASCII:
        port=QString("Serial ASCII");
+       break;
+   case EcuItem::INTERFACETYPE_ANDROID_LOGCAT:
+       port=QString("Android Logcat");
        break;
    default:
        port=QString("UNDEFINED");

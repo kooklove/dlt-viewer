@@ -170,6 +170,7 @@ public:
 
     void dltIpcFromPCAP(QString fileName);
     void dltIpcFromMF4(QString fileName);
+    void dltFromLogcat(QString fileName);
 
     void setOutputfile(QFile *newOutputfile);
 

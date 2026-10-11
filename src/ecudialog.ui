@@ -70,6 +70,11 @@
            <string>Serial ASCII</string>
           </property>
          </item>
+         <item>
+          <property name="text">
+           <string>Android Logcat</string>
+          </property>
+         </item>
         </widget>
        </item>
        <item row="9" column="0" colspan="3">
@@ -509,6 +514,147 @@
           <bool>true</bool>
          </property>
         </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_Android">
+      <attribute name="title">
+       <string>Android</string>
+      </attribute>
+      <layout class="QGridLayout" name="gridLayout_Android">
+       <item row="0" column="0" colspan="2">
+        <widget class="QLabel" name="label_AdbPath">
+         <property name="text">
+          <string>ADB Executable Path:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0" colspan="2">
+        <widget class="QLineEdit" name="lineEditAdbPath">
+         <property name="text">
+          <string>adb</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="2">
+        <widget class="QPushButton" name="pushButtonBrowseAdb">
+         <property name="text">
+          <string>Browse...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0" colspan="3">
+        <widget class="QLabel" name="label_AdbTcp">
+         <property name="text">
+          <string>Ethernet / Network Connection (IP : Port):</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLineEdit" name="lineEditAdbIp">
+         <property name="placeholderText">
+          <string>192.168.1.100</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QLineEdit" name="lineEditAdbPort">
+         <property name="text">
+          <string>5555</string>
+         </property>
+         <property name="placeholderText">
+          <string>5555</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="2">
+        <widget class="QPushButton" name="pushButtonConnectAdbTcp">
+         <property name="text">
+          <string>Connect IP</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="0" colspan="2">
+        <widget class="QLabel" name="label_AdbDevice">
+         <property name="text">
+          <string>Target Device Serial / IP:Port (Optional):</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0" colspan="2">
+        <widget class="QLineEdit" name="lineEditAdbDeviceSerial"/>
+       </item>
+       <item row="5" column="2">
+        <widget class="QPushButton" name="pushButtonRefreshAdb">
+         <property name="text">
+          <string>Detect</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="0" colspan="3">
+        <widget class="QLabel" name="label_AdbPreCommand">
+         <property name="text">
+          <string>Pre-command (Run before logcat, e.g. root; remount; logcat -c):</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0" colspan="3">
+        <widget class="QLineEdit" name="lineEditAdbPreCommand">
+         <property name="placeholderText">
+          <string>e.g. root; logcat -G 16M; logcat -c</string>
+         </property>
+         <property name="toolTip">
+          <string>Commands separated by ';' are executed sequentially before starting logcat. Prefix with 'adb' or write ADB subcommands directly (e.g. 'root; logcat -c').</string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="0" colspan="3">
+        <widget class="QLabel" name="label_AdbArgs">
+         <property name="text">
+          <string>Logcat Extra Arguments:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="0" colspan="3">
+        <widget class="QLineEdit" name="lineEditAdbLogcatArgs">
+         <property name="text">
+          <string>-v threadtime</string>
+         </property>
+        </widget>
+       </item>
+       <item row="10" column="0" colspan="3">
+        <widget class="QLabel" name="label_AdbSaveFormat">
+         <property name="text">
+          <string>Log Save Format (File -&gt; Save As):</string>
+         </property>
+        </widget>
+       </item>
+       <item row="11" column="0" colspan="3">
+        <widget class="QComboBox" name="comboBoxAdbSaveFormat">
+         <item>
+          <property name="text">
+           <string>DLT Format (*.dlt)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Logcat Text Format (*.log, *.txt)</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="12" column="0" colspan="3">
+        <spacer name="verticalSpacer_Android">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </widget>

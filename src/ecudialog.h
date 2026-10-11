@@ -59,6 +59,12 @@ public:
     bool getMulticast();
     int interfacetypecurrentindex();
 
+    QString adbPath();
+    QString adbDeviceSerial();
+    QString adbPreCommand();
+    QString adbLogcatArgs();
+    int adbSaveFormat();
+
     void setHostnameList(QStringList hostnames);
     void setSerialPortList();
     void setIPPortList(QStringList ports);
@@ -78,6 +84,10 @@ private slots:
     void on_comboBoxInterface_currentIndexChanged(int index);
 
     void on_checkBoxMulticast_toggled(bool checked);
+
+    void on_pushButtonBrowseAdb_clicked();
+    void on_pushButtonRefreshAdb_clicked();
+    void on_pushButtonConnectAdbTcp_clicked();
 
 private:
     Ui::EcuDialog *ui;

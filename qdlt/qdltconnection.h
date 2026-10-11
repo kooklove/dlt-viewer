@@ -100,6 +100,10 @@ public:
 
     bool parseDlt(QDltMsg &msg,bool supportDLTv2 = false);
     bool parseAscii(QDltMsg &msg);
+    bool parseLogcat(QDltMsg &msg, const QString &defaultEcuId = QString("ANDR"));
+    static bool parseLogcatLine(const QString &line, QDltMsg &msg, const QString &defaultEcuId = QString("ANDR"), unsigned char msgCounter = 0);
+    static QString formatLogcatLine(const QDltMsg &msg);
+    QString getLastLogcatLine() const { return lastLogcatLine; }
 
     void clear();
     void add(const QByteArray &bytes);
@@ -119,6 +123,7 @@ protected:
 private:
 
     unsigned char messageCounter;
+    QString lastLogcatLine;
 
 };
 

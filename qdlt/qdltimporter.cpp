@@ -9,6 +9,8 @@ extern "C" {
 
 #include "qdltmsg.h"
 #include "qdltimporter.h"
+#include "qdltconnection.h"
+#include <QTextStream>
 
 #include <chrono>
 #include <time.h>
@@ -43,6 +45,8 @@ void QDltImporter::run()
             dltIpcFromMF4(i);
         else if (i.endsWith(".pcap",Qt::CaseInsensitive))
             dltIpcFromPCAP(i);
+        else if (i.endsWith(".log",Qt::CaseInsensitive) || i.endsWith(".txt",Qt::CaseInsensitive) || i.endsWith(".logcat",Qt::CaseInsensitive))
+            dltFromLogcat(i);
     }
     emit resultReady(result);
 }
@@ -1254,4 +1258,61 @@ void QDltImporter::setPcapPorts(const QString &importPcapPorts)
             pcapPorts.append(item.toUShort());
     }
 }
+
+void QDltImporter::dltFromLogcat(QString fileName)
+{
+    QFile inputfile(fileName);
+    if(!inputfile.open(QFile::ReadOnly | QFile::Text)) {
+        qDebug() << "dltFromLogcat: Cannot open file" << fileName;
+        return;
+    }
+
+    if(!outputfile->isOpen()) {
+        if(!outputfile->open(QIODevice::WriteOnly | QIODevice::Append)) {
+            qDebug() << "Failed opening outputfile WriteOnly" << outputfile->fileName();
+            inputfile.close();
+            return;
+        }
+    }
+
+    emit progress("LOGCAT", 1, 0);
+
+    qint64 fileSize = inputfile.size();
+    if(fileSize == 0) {
+        inputfile.close();
+        return;
+    }
+
+    QTextStream in(&inputfile);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    in.setEncoding(QStringConverter::Utf8);
+#else
+    in.setCodec("UTF-8");
+#endif
+
+    int progressCounter = 1;
+    unsigned char msgCounter = 0;
+    QDltMsg msg;
+
+    while(!in.atEnd()) {
+        QString line = in.readLine();
+        qint64 currentPos = inputfile.pos();
+        int percent = static_cast<int>(currentPos * 100 / fileSize);
+        if(percent >= progressCounter) {
+            progressCounter = percent + 1;
+            emit progress("LOGCAT:", 2, percent);
+        }
+
+        if(QDltConnection::parseLogcatLine(line, msg, QString("ANDR"), msgCounter++)) {
+            QByteArray bufferHeader = msg.getHeader();
+            QByteArray bufferPayload = msg.getPayload();
+            writeDLTMessageToFile(bufferHeader, bufferPayload.data(), bufferPayload.size(),
+                                  msg.getEcuid(), msg.getTime(), msg.getMicroseconds());
+        }
+    }
+
+    emit progress("LOGCAT:", 2, 100);
+    inputfile.close();
+}
+
 

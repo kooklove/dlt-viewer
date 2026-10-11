@@ -138,8 +138,10 @@ private:
 
     QDltControl qcontrol;
     QFile outputfile;
+    QFile logcatTextOutputFile;
     bool outputfileIsTemporary;
     bool outputfileIsFromCLI;
+    bool isLogcatTextSavePreferred() const;
     CTableModel *m_tableModel;
     CSearchTableModel *m_searchtableModel;
     CQDltFileMessageStoreAdapter m_messageStore;
@@ -597,6 +599,9 @@ private slots:
     void disconnected();
     void error(QAbstractSocket::SocketError);
     void readyRead();
+    void readyReadLogcat();
+    void logcatProcessError(QProcess::ProcessError);
+    void logcatProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void timeout();
     void connectAll();
     void disconnectAll();

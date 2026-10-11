@@ -23,6 +23,9 @@
 #include <QSerialPort>
 #include <QSerialPortInfo>
 #include <QNetworkInterface>
+#include <QFileDialog>
+#include <QProcess>
+#include <QMessageBox>
 
 EcuDialog::EcuDialog(QWidget *parent) :
     QDialog(parent),
@@ -121,6 +124,13 @@ void EcuDialog::setData(EcuItem &item)
     ui->checkBoxMulticast->setCheckState(item.is_multicast?Qt::Checked:Qt::Unchecked);
     ui->checkBoxAutoReconnect->setCheckState(item.autoReconnect?Qt::Checked:Qt::Unchecked);
     ui->spinBoxAutoreconnect->setValue(item.autoReconnectTimeout);
+
+    ui->lineEditAdbPath->setText(item.getAdbPath().isEmpty() ? "adb" : item.getAdbPath());
+    ui->lineEditAdbDeviceSerial->setText(item.getAdbDeviceSerial());
+    ui->lineEditAdbPreCommand->setText(item.getAdbPreCommand());
+    ui->lineEditAdbLogcatArgs->setText(item.getAdbLogcatArgs().isEmpty() ? "-v threadtime" : item.getAdbLogcatArgs());
+    ui->comboBoxAdbSaveFormat->setCurrentIndex(item.getAdbSaveFormat());
+
     on_comboBoxInterface_currentIndexChanged(ui->comboBoxInterface->currentIndex());
 
     ui->checkBoxWriteDLTv2StorageHeader->setCheckState((item.getWriteDLTv2StorageHeader())?Qt::Checked:Qt::Unchecked);
@@ -245,6 +255,31 @@ int EcuDialog::update()
     return  ui->checkBoxUpdate->isChecked();
 }
 
+QString EcuDialog::adbPath()
+{
+    return ui->lineEditAdbPath->text().trimmed();
+}
+
+QString EcuDialog::adbDeviceSerial()
+{
+    return ui->lineEditAdbDeviceSerial->text().trimmed();
+}
+
+QString EcuDialog::adbPreCommand()
+{
+    return ui->lineEditAdbPreCommand->text().trimmed();
+}
+
+QString EcuDialog::adbLogcatArgs()
+{
+    return ui->lineEditAdbLogcatArgs->text().trimmed();
+}
+
+int EcuDialog::adbSaveFormat()
+{
+    return ui->comboBoxAdbSaveFormat->currentIndex();
+}
+
 void EcuDialog::on_checkBoxMulticast_toggled(bool checked)
 {
  ui->comboBoxUDP_mcastaddress->setEnabled(checked);
@@ -355,6 +390,12 @@ void EcuDialog::setDialogToEcuItem(EcuItem *item)
     item->setSendSerialHeaderSerial(this->ui->checkBoxSendSerialHeaderSerial->checkState()==Qt::Checked);
     item->setSyncSerialHeaderSerial(this->ui->checkBoxSyncToSerialHeaderSerial->checkState()==Qt::Checked);
 
+    item->setAdbPath(this->adbPath());
+    item->setAdbDeviceSerial(this->adbDeviceSerial());
+    item->setAdbPreCommand(this->adbPreCommand());
+    item->setAdbLogcatArgs(this->adbLogcatArgs());
+    item->setAdbSaveFormat(this->adbSaveFormat());
+
     item->setWriteDLTv2StorageHeader(ui->checkBoxWriteDLTv2StorageHeader->checkState()==Qt::Checked);
 }
 
@@ -366,6 +407,7 @@ void EcuDialog::on_checkBoxAutoReconnect_toggled(bool checked)
 void EcuDialog::setIFpresetindex(int preset)
 {
   ui->comboBoxInterface->setCurrentIndex(preset);
+  on_comboBoxInterface_currentIndexChanged(preset);
 }
 
 int EcuDialog::interfacetypecurrentindex()
@@ -379,10 +421,12 @@ void EcuDialog::on_comboBoxInterface_currentIndexChanged(int index)
     switch(index)
     {
         case EcuItem::INTERFACETYPE_TCP:
-            //we have TCP set -> disable serial, enable TCP
+            //we have TCP set -> disable others, enable TCP
             ui->tabWidget->setTabEnabled(1,true);
             ui->tabWidget->setTabEnabled(2,false);
             ui->tabWidget->setTabEnabled(3,false);
+            ui->tabWidget->setTabEnabled(4,false);
+            ui->tabWidget->setCurrentIndex(1);
             ui->comboBoxNetworkIF->setVisible(false);
             ui->checkBoxMulticast->setVisible(false);
             ui->label_3->setText(QString("Hostname:"));
@@ -390,10 +434,12 @@ void EcuDialog::on_comboBoxInterface_currentIndexChanged(int index)
         break;
 
         case EcuItem::INTERFACETYPE_UDP:
-            //we have UDP set -> disable serial, enable UDP
+            //we have UDP set -> disable others, enable UDP
             ui->tabWidget->setTabEnabled(1,false);
             ui->tabWidget->setTabEnabled(2,true);
             ui->tabWidget->setTabEnabled(3,false);
+            ui->tabWidget->setTabEnabled(4,false);
+            ui->tabWidget->setCurrentIndex(2);
             ui->comboBoxNetworkIF->setVisible(true);
             ui->checkBoxMulticast->setVisible(true);
             ui->label_UDP_mcastadress->setToolTip(QString("Multicast IP address to subscribe to. \nSelect <none> for unicast."));
@@ -405,6 +451,8 @@ void EcuDialog::on_comboBoxInterface_currentIndexChanged(int index)
             ui->tabWidget->setTabEnabled(1,false);
             ui->tabWidget->setTabEnabled(2,false);
             ui->tabWidget->setTabEnabled(3,true);
+            ui->tabWidget->setTabEnabled(4,false);
+            ui->tabWidget->setCurrentIndex(3);
             ui->checkBoxSendSerialHeaderSerial->setVisible(true);
             ui->checkBoxSyncToSerialHeaderSerial->setVisible(true);
             break;
@@ -413,10 +461,115 @@ void EcuDialog::on_comboBoxInterface_currentIndexChanged(int index)
             ui->tabWidget->setTabEnabled(1,false);
             ui->tabWidget->setTabEnabled(2,false);
             ui->tabWidget->setTabEnabled(3,true);
+            ui->tabWidget->setTabEnabled(4,false);
+            ui->tabWidget->setCurrentIndex(3);
             ui->checkBoxSendSerialHeaderSerial->setVisible(false);
             ui->checkBoxSyncToSerialHeaderSerial->setVisible(false);
             break;
 
+        case EcuItem::INTERFACETYPE_ANDROID_LOGCAT:
+            ui->tabWidget->setTabEnabled(1,false);
+            ui->tabWidget->setTabEnabled(2,false);
+            ui->tabWidget->setTabEnabled(3,false);
+            ui->tabWidget->setTabEnabled(4,true);
+            ui->tabWidget->setCurrentIndex(4);
+            break;
+    }
+}
+
+void EcuDialog::on_pushButtonBrowseAdb_clicked()
+{
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("Select ADB Executable"),
+        ui->lineEditAdbPath->text().isEmpty() ? QString() : ui->lineEditAdbPath->text(),
+#if defined(Q_OS_WIN)
+        tr("Executables (*.exe);;All Files (*)")
+#else
+        tr("All Files (*)")
+#endif
+    );
+    if (!fileName.isEmpty()) {
+        ui->lineEditAdbPath->setText(fileName);
+    }
+}
+
+void EcuDialog::on_pushButtonRefreshAdb_clicked()
+{
+    QString adbExe = ui->lineEditAdbPath->text().trimmed();
+    if (adbExe.isEmpty()) adbExe = "adb";
+
+    QProcess process;
+    process.start(adbExe, QStringList() << "devices");
+    if (!process.waitForStarted(3000)) {
+        QMessageBox::warning(this, tr("ADB Detect"), tr("Failed to start ADB: %1").arg(adbExe));
+        return;
+    }
+    if (!process.waitForFinished(5000)) {
+        process.kill();
+        QMessageBox::warning(this, tr("ADB Detect"), tr("ADB timed out detecting devices."));
+        return;
+    }
+
+    QString output = QString::fromUtf8(process.readAllStandardOutput());
+    QStringList lines = output.split('\n',
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        Qt::SkipEmptyParts
+#else
+        QString::SkipEmptyParts
+#endif
+    );
+
+    QStringList devices;
+    for (int i = 1; i < lines.size(); ++i) { // Skip "List of devices attached"
+        QString line = lines[i].trimmed();
+        if (line.isEmpty()) continue;
+        QStringList parts = line.split(QRegularExpression("\\s+"));
+        if (parts.size() >= 2 && parts[1] == "device") {
+            devices.append(parts[0]);
+        }
+    }
+
+    if (devices.isEmpty()) {
+        QMessageBox::information(this, tr("ADB Detect"), tr("No connected Android devices found."));
+    } else {
+        ui->lineEditAdbDeviceSerial->setText(devices.first());
+        QMessageBox::information(this, tr("ADB Detect"), tr("Found devices: %1\nSelected: %2").arg(devices.join(", "), devices.first()));
+    }
+}
+
+void EcuDialog::on_pushButtonConnectAdbTcp_clicked()
+{
+    QString ip = ui->lineEditAdbIp->text().trimmed();
+    if (ip.isEmpty()) {
+        QMessageBox::warning(this, tr("ADB Ethernet"), tr("Please enter an IP address."));
+        return;
+    }
+
+    QString port = ui->lineEditAdbPort->text().trimmed();
+    if (port.isEmpty()) port = "5555";
+
+    QString target = QString("%1:%2").arg(ip, port);
+    QString adbExe = ui->lineEditAdbPath->text().trimmed();
+    if (adbExe.isEmpty()) adbExe = "adb";
+
+    QProcess process;
+    process.start(adbExe, QStringList() << "connect" << target);
+    if (!process.waitForStarted(3000)) {
+        QMessageBox::warning(this, tr("ADB Ethernet"), tr("Failed to start ADB: %1").arg(adbExe));
+        return;
+    }
+    if (!process.waitForFinished(5000)) {
+        process.kill();
+        QMessageBox::warning(this, tr("ADB Ethernet"), tr("ADB connect timed out."));
+        return;
+    }
+
+    QString output = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+    if (output.contains("connected to", Qt::CaseInsensitive)) {
+        ui->lineEditAdbDeviceSerial->setText(target);
+        QMessageBox::information(this, tr("ADB Ethernet"), tr("Successfully connected to %1\n%2").arg(target, output));
+    } else {
+        QMessageBox::warning(this, tr("ADB Ethernet"), tr("ADB response:\n%1").arg(output));
     }
 }
 
